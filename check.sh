@@ -1,0 +1,1 @@
+sh compile.sh && valgrind --leak-check=full ./ga.exe
