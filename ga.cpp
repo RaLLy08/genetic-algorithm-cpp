@@ -7,52 +7,90 @@
 #include <sys/resource.h>
 #include <cassert>
 
-#define MUTATION_CHANCE_PERCENT 5
+using namespace std;
 
 double norm_dist(double mean, double std_dev);
 template <typename T>
 T find_median(T arr[], size_t arr_size);
 
-// class Rand
 
-using namespace std;
 mt19937 gen;
+
+
+static int randInt(int min, int max) {
+    uniform_int_distribution<int>distribution(min, max);
+    return distribution(gen);
+}
+
+static double randDouble(double min, double max) {
+    uniform_real_distribution<double> distribution(min, max);
+    return distribution(gen);
+}
 
 template <typename E>
 class GA {
-    size_t populationSize;
-    size_t chromosomeLength;
-    size_t maxGenerations;
+    const float mutationChance;
+
+    const size_t chromosomeLength;
+    const size_t maxGenerations;
+
+    const size_t parentSize;
+    const size_t offspringSize;
+    const size_t populationSize;
+
+    const size_t childCount;
+
+    const size_t keepWorstSize;
+    const size_t eliteParentSize;
+
     vector<double> fitness;
     vector<vector<E>> population;
 
-    function<E(void)> chromoInitRandLambda;
+    function<E(void)> initRandFunc;
+    function<E(E)> mutateRandFunc;
 
     public:
-        static int randInt(int min, int max) {
-            uniform_int_distribution<int> distribution(min, max);
-            return distribution(gen);
+        void setInitRandFunc(function<E(void)> initRandFunc) {
+            this->initRandFunc = initRandFunc;
         }
 
-        static double randDouble(double min, double max) {
-            uniform_real_distribution<double> distribution(min, max);
-            return distribution(gen);
+        void setMutateRandFunc(function<E(E)> mutateRandFunc) {
+            this->mutateRandFunc = mutateRandFunc;
         }
 
-        void setChromoInitRandLambda(function<E(void)> chromoInitRandLambda) {
-            this->chromoInitRandLambda = chromoInitRandLambda;
+
+        void validateParameters() {
+            if (this->initRandFunc == nullptr) {
+                throw invalid_argument("initRandFunc is not set");
+            }
         }
 
+        /*
+            @param parentSize: number of parents
+            @param chromosomeLength: length of chromosome
+            @param maxGenerations: number of generations
+            @param childCount: number of children for each parent
+        */
         GA(
-            size_t populationSize, 
-            size_t chromosomeLength, 
-            size_t maxGenerations
+            const size_t parentSize, 
+            const size_t chromosomeLength, 
+            const size_t maxGenerations,
+            const float elitePercent = 0.1,
+            const float mutationChance = 0.05,
+            const float keepWorstPercent = 0.2,
+            const size_t childCount = 1
         ): 
-            populationSize(populationSize), 
             chromosomeLength(chromosomeLength), 
             maxGenerations(maxGenerations),
-            fitness(populationSize, 0),
-            population(populationSize * 2)
+            parentSize(parentSize),
+            childCount(childCount),
+            offspringSize(parentSize * childCount),
+            // fitness(parentSize),
+            eliteParentSize(parentSize * elitePercent),
+            keepWorstSize(offspringSize * keepWorstPercent),
+            populationSize(parentSize + offspringSize),
+            mutationChance(mutationChance),
+            population(populationSize)
         {}
 
         double fitnessFunction(vector<E> chromosome) {
@@ -65,32 +103,51 @@ class GA {
             return sum;
         }
 
+        void breed() {
+            // variable child count
+            for (size_t j = 0; j < parentSize; j++) {
+                size_t parent2Index = randInt(0, parentSize - 1);
+
+                vector<E> parent1 = population[j];
+                vector<E> parent2 = population[parent2Index];
+
+                vector<E> child = crossover(parent1, parent2);
+
+                population[parentSize + j] = child;
+            }
+        }
+
+        void replaceWeakToPopulation() {
+            assert((
+                "keepWorstSize must be less than parentSize - eliteParentSize", 
+                keepWorstSize < parentSize - eliteParentSize
+            ));
+
+            shuffle(population.begin() + parentSize, population.end(), gen);
+
+            for (size_t wI = 0; wI < keepWorstSize; wI++) {
+                // starts from end of population -> new children size
+                size_t parentIndex = (parentSize - 1) - wI;
+                size_t offspringRandIndex = parentSize + wI;
+
+                swap(
+                    population[parentIndex], 
+                    population[offspringRandIndex]
+                );
+            }
+        }
+
+        // void replaceWeakToPopulationRandom 
+
         void run() {
             validateParameters();
-            printParameters();
 
             initializePopulation();
             printPopulation();
 
-            size_t childNumber = 1;
-            size_t eliteSize = 2;
-
             for (size_t i = 0; i < maxGenerations; i++) {
-                
-                for (size_t j = 0; j < populationSize; j++) {
-                    size_t parent2Index = rand() % populationSize;
-
-                    vector<E> parent1 = population[j];
-                    vector<E> parent2 = population[parent2Index];
-
-                    vector<E> child = crossover(parent1, parent2);
-
-                    if (rand() % 100 < MUTATION_CHANCE_PERCENT) {
-                        mutate(child);
-                    }
-
-                    population[populationSize + j] = child;
-                }
+                breed();
+                mutateChildren();
 
                 // calculate fitness separately
                 sort(population.begin(), population.end(), [this](vector<E> a, vector<E> b) {
@@ -98,23 +155,7 @@ class GA {
                 });
 
                 // float randomWorstPercent = 0.2;
-
-                size_t pickMaxWorstSize = 3;
-    
-                assert(("keepWorstMax must be less than populationSize - eliteSize", pickMaxWorstSize < populationSize - eliteSize));
-                // unique random
-                shuffle(population.begin() + populationSize, population.end(), gen);
-
-                for (size_t wI = 0; wI < pickMaxWorstSize; wI++) {
-                    // starts from end of population -> new children size
-                    size_t parentIndex = (populationSize - 1) - wI;
-                    size_t offspringRandIndex = populationSize + wI;
-
-                    swap(
-                        population[parentIndex], 
-                        population[offspringRandIndex]
-                    );
-                }
+                replaceWeakToPopulation();
             }
 
             cout << "Final population" << endl;
@@ -122,17 +163,15 @@ class GA {
 
             cout << "Best chromosome: " << endl;
             printChromosome(population[0]);
+
+            printParameters();
         }
 
     private:
-        void validateParameters() {
-            if (this->chromoInitRandLambda == nullptr) {
-                throw invalid_argument("chromoInitRandLambda is not set");
-            }
-        }
+
 
         vector<E> crossover(vector<E> chromosome1, vector<E> chromosome2) {
-            size_t crossoverPoint = rand() % chromosomeLength;
+            size_t crossoverPoint = randInt(0, chromosomeLength - 1);
             vector<E> child = chromosome1;
 
             for (size_t i = crossoverPoint; i < chromosomeLength; i++) {
@@ -142,22 +181,30 @@ class GA {
             return child;
         }
 
-        void mutate(vector<E> chromosome) {
-            size_t mutationPoint = rand() % chromosomeLength;
+        void mutateChromosome(vector<E> chromosome) {
+            size_t mutationPoint = randInt(0, chromosomeLength - 1);
 
             chromosome[mutationPoint] = getMutationValue(chromosome[mutationPoint]);
         }
 
+        void mutateChildren() {
+            for (size_t i = parentSize; i < populationSize; i++) {
+                if (randDouble(0.0, 1.0) < mutationChance) {
+                    mutateChromosome(population[parentSize]);
+                }
+            }
+        }
+
         E getMutationValue(E value) {
             // change depenging on fitness etc.
-            return value + norm_dist(0, 0.1);
+            return mutateRandFunc(value);
         }
 
         vector<E> createChromosome() {
             vector<E> chromosome(chromosomeLength);
 
             for (E& gene : chromosome) {
-                gene = chromoInitRandLambda();
+                gene = initRandFunc();
             }
 
             return chromosome;
@@ -166,7 +213,7 @@ class GA {
         void initializePopulation() {
             cout << "Initializing population" << endl;
 
-            for (size_t i = 0; i < populationSize; i++) {
+            for (size_t i = 0; i < parentSize; i++) {
                 vector<E> chromosome = createChromosome();
 
                 population[i] = chromosome;
@@ -192,10 +239,23 @@ class GA {
         }
         
         void printParameters() {
-            cout << "Population size: " << populationSize << endl;
-            cout << "Chromosome length: " << chromosomeLength << endl;
+            cout << endl << "--------------------------------" << endl;
             cout << "Max generations: " << maxGenerations << endl;
+            cout << "Chromosome length: " << chromosomeLength << endl;
+            cout << "Population size: " << populationSize << endl;
+            cout << endl;
+            cout << "Offspring size: " << offspringSize << endl;
+            cout << "Parent size: " << parentSize << endl;
+            cout << endl;
+            cout << "Elite Parent Size: " << eliteParentSize << endl;
+            cout << "Keep worst percent: " << keepWorstSize << endl;
+            cout << "Mutation chance: " << mutationChance << endl;
+
             cout << "Size of population in bytes: " << (population.size() * chromosomeLength * sizeof(E))  << endl;
+
+            cout << "--------------------------------" << endl;
+
+            
         }
 };
 
@@ -213,8 +273,13 @@ int main() {
 
     GA<int> ga(10, 10, 20);
 
-    ga.setChromoInitRandLambda([]() -> int {
-        return rand() % 2;
+    ga.setInitRandFunc([]() -> int {
+        return randInt(0, 1);
+    });
+
+    ga.setMutateRandFunc([](int value) -> int {
+        //  value + norm_dist(0, 0.1);
+        return value == 0 ? 1 : 0;
     });
 
     ga.run();
