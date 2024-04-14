@@ -7,15 +7,16 @@
 #include <sys/resource.h>
 #include <cassert>
 
+#include <thread>
+#include <chrono>
+
 using namespace std;
 
 double norm_dist(double mean, double std_dev);
 template <typename T>
 T find_median(T arr[], size_t arr_size);
 
-
 mt19937 gen;
-
 
 static int randInt(int min, int max) {
     uniform_int_distribution<int>distribution(min, max);
@@ -48,6 +49,8 @@ class GA {
 
     function<E(void)> initRandFunc;
     function<E(E)> mutateRandFunc;
+    function<E(vector<E>)> fitnessFunc;
+    function<void(vector<vector<E>>*, size_t)> onGenerationEndFunc;
 
     public:
         void setInitRandFunc(function<E(void)> initRandFunc) {
@@ -58,10 +61,21 @@ class GA {
             this->mutateRandFunc = mutateRandFunc;
         }
 
+        void setFitnessFunc(function<E(vector<E>)> fitnessFunc) {
+            this->fitnessFunc = fitnessFunc;
+        }
+
+        void setOnGenerationEndFunc(function<void(vector<vector<E>>*, size_t)> onGenerationEndFunc) {
+            this->onGenerationEndFunc = onGenerationEndFunc;
+        }
 
         void validateParameters() {
             if (this->initRandFunc == nullptr) {
                 throw invalid_argument("initRandFunc is not set");
+            }
+
+            if (this->fitnessFunc == nullptr) {
+                throw invalid_argument("fitnessFunc is not set");
             }
         }
 
@@ -70,11 +84,12 @@ class GA {
             @param chromosomeLength: length of chromosome
             @param maxGenerations: number of generations
             @param childCount: number of children for each parent
+            @param elitePercent: percentage of best parents that will not be mutated and replaced
         */
         GA(
-            const size_t parentSize, 
-            const size_t chromosomeLength, 
             const size_t maxGenerations,
+            const size_t chromosomeLength, 
+            const size_t parentSize, 
             const float elitePercent = 0.1,
             const float mutationChance = 0.05,
             const float keepWorstPercent = 0.2,
@@ -93,16 +108,6 @@ class GA {
             population(populationSize)
         {}
 
-        double fitnessFunction(vector<E> chromosome) {
-            double sum = 0;
-
-            for (E gene : chromosome) {
-                sum += gene;
-            }
-
-            return sum;
-        }
-
         void breed() {
             // variable child count
             for (size_t j = 0; j < parentSize; j++) {
@@ -112,12 +117,12 @@ class GA {
                 vector<E> parent2 = population[parent2Index];
 
                 vector<E> child = crossover(parent1, parent2);
-
+                
                 population[parentSize + j] = child;
             }
         }
 
-        void replaceWeakToPopulation() {
+        void replaceWeakToPopulationEnd() {
             assert((
                 "keepWorstSize must be less than parentSize - eliteParentSize", 
                 keepWorstSize < parentSize - eliteParentSize
@@ -143,7 +148,7 @@ class GA {
             validateParameters();
 
             initializePopulation();
-            printPopulation();
+            // printPopulation();
 
             for (size_t i = 0; i < maxGenerations; i++) {
                 breed();
@@ -151,15 +156,18 @@ class GA {
 
                 // calculate fitness separately
                 sort(population.begin(), population.end(), [this](vector<E> a, vector<E> b) {
-                    return fitnessFunction(a) > fitnessFunction(b);
+                    return fitnessFunc(a) < fitnessFunc(b);
                 });
 
-                // float randomWorstPercent = 0.2;
-                replaceWeakToPopulation();
+                if (onGenerationEndFunc != nullptr) {
+                    onGenerationEndFunc(&population, i);
+                }
+
+                replaceWeakToPopulationEnd();
             }
 
-            cout << "Final population" << endl;
-            printPopulation();
+            // cout << "Final population" << endl;
+            // printPopulation();
 
             cout << "Best chromosome: " << endl;
             printChromosome(population[0]);
@@ -168,15 +176,48 @@ class GA {
         }
 
     private:
+        void printCrossover(vector<E> chromosome1, vector<E> chromosome2, vector<E> child, size_t crossoverPoint) {
+            cout << "Crossover point: " << crossoverPoint << endl << endl;
 
+            cout << "Parent 1: ";
+            printChromosome(chromosome1);
+            cout << endl;
 
+            cout << "Parent 2: ";
+            printChromosome(chromosome2);
+            cout << endl;
+
+            cout << "Child:    ";
+
+            for (size_t i = 0; i < chromosomeLength; i++) {
+                cout << child[i];
+
+                if (i == crossoverPoint) {
+                    cout << "|";
+                } else {
+                    cout << " ";
+                }
+            }
+            
+            cout << endl;
+        }
+        
         vector<E> crossover(vector<E> chromosome1, vector<E> chromosome2) {
             size_t crossoverPoint = randInt(0, chromosomeLength - 1);
+
             vector<E> child = chromosome1;
 
             for (size_t i = crossoverPoint; i < chromosomeLength; i++) {
                 child[i] = chromosome2[i];
             }
+
+            // for (size_t i = 0; i < chromosomeLength; i++) {
+            //     if (randDouble(0.0, 1.0) < 0.5) {
+            //         child[i] = chromosome2[i];
+            //     }
+            // }    
+
+            // printCrossover(chromosome1, chromosome2, child, crossoverPoint);
 
             return child;
         }
@@ -224,6 +265,8 @@ class GA {
             for (auto it = chromosome.begin(); it != chromosome.end(); ++it) {
                 cout << *it << " ";
             }
+
+            cout << endl;
         }
 
         void printPopulation() {
@@ -254,8 +297,6 @@ class GA {
             cout << "Size of population in bytes: " << (population.size() * chromosomeLength * sizeof(E))  << endl;
 
             cout << "--------------------------------" << endl;
-
-            
         }
 };
 
@@ -267,22 +308,63 @@ void printMemoryUsage() {
 }
 
 
+double equation(double a, double b, double c, double x) {
+    return a * x * x + b * x + c;
+}
+
+double desiredResult = equation(1, 2, 3, 4);
+
+
+double fitnessFunc(vector<double> chromosome) {
+    double result = equation(chromosome[0], chromosome[1], chromosome[2], chromosome[3]);
+
+    return abs(result - desiredResult);
+}
+
 int main() {
-    // gen.seed(random_device()());
+    gen.seed(random_device()());
     // srand(time(NULL));
 
-    GA<int> ga(10, 10, 20);
+    GA<double> ga(
+        100,
+        4, 
+        100,
+        0.2,
+        0.3,
+        0.2
+    );
 
-    ga.setInitRandFunc([]() -> int {
-        return randInt(0, 1);
+    ga.setInitRandFunc([]() -> double {
+        return randInt(-10, 10);
     });
 
-    ga.setMutateRandFunc([](int value) -> int {
+    ga.setMutateRandFunc([](double value) -> double {
         //  value + norm_dist(0, 0.1);
-        return value == 0 ? 1 : 0;
+        return value + norm_dist(-1, 1);
+    });
+
+
+    ga.setFitnessFunc(fitnessFunc);
+
+    ga.setOnGenerationEndFunc([](auto* population, size_t generation) {
+        // cout << "Generation end" << endl;
+        vector<double> bestChromosome = population->at(0);
+
+        int bestFitness = fitnessFunc(bestChromosome);
+        
+        cout << "Best fitness: " << bestFitness << endl;
+        cout << "Generation: " << generation << endl;
+        cout << "Desired result: " << desiredResult << endl;
+        cout << "Result: " << equation(bestChromosome[0], bestChromosome[1], bestChromosome[2], bestChromosome[3]) << endl;
+
+        printf("a: %f, b: %f, c: %f, x: %f\n", bestChromosome[0], bestChromosome[1], bestChromosome[2], bestChromosome[3]);
+        this_thread::sleep_for(chrono::milliseconds(100));
     });
 
     ga.run();
+
+
+    cout << "Desired result: " << desiredResult << endl;
 
     printMemoryUsage();
 
