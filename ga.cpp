@@ -12,10 +12,6 @@
 
 using namespace std;
 
-double norm_dist(double mean, double std_dev);
-template <typename T>
-T find_median(T arr[], size_t arr_size);
-
 mt19937 gen;
 
 static int randInt(int min, int max) {
@@ -27,6 +23,13 @@ static double randDouble(double min, double max) {
     uniform_real_distribution<double> distribution(min, max);
     return distribution(gen);
 }
+
+
+static double norm_dist(double mean, double std_dev) {
+    normal_distribution<double> dist(mean, std_dev);
+
+    return dist(gen);
+};
 
 template <typename E>
 class GA {
@@ -43,31 +46,18 @@ class GA {
 
     const size_t keepWorstSize;
     const size_t eliteParentSize;
-
-    vector<double> fitness;
-    vector<vector<E>> population;
-
-    function<E(void)> initRandFunc;
-    function<E(E)> mutateRandFunc;
-    function<E(vector<E>)> fitnessFunc;
-    function<void(vector<vector<E>>*, size_t)> onGenerationEndFunc;
+    size_t generation = 0;
 
     public:
-        void setInitRandFunc(function<E(void)> initRandFunc) {
-            this->initRandFunc = initRandFunc;
-        }
+        vector<vector<E>> population;
 
-        void setMutateRandFunc(function<E(E)> mutateRandFunc) {
-            this->mutateRandFunc = mutateRandFunc;
-        }
+        function<E(E)> mutateGeneFunc;
+        function<E(vector<E>*)> fitnessFunc;
 
-        void setFitnessFunc(function<E(vector<E>)> fitnessFunc) {
-            this->fitnessFunc = fitnessFunc;
-        }
+        function<E(void)> initRandFunc;
+        function<void(vector<vector<E>>*, size_t)> onGenerationEndFunc;
+        function<void()> onFinish;
 
-        void setOnGenerationEndFunc(function<void(vector<vector<E>>*, size_t)> onGenerationEndFunc) {
-            this->onGenerationEndFunc = onGenerationEndFunc;
-        }
 
         void validateParameters() {
             if (this->initRandFunc == nullptr) {
@@ -113,11 +103,11 @@ class GA {
             for (size_t j = 0; j < parentSize; j++) {
                 size_t parent2Index = randInt(0, parentSize - 1);
 
-                vector<E> parent1 = population[j];
-                vector<E> parent2 = population[parent2Index];
+                vector<E> *parent1 = &population[j];
+                vector<E> *parent2 = &population[parent2Index];
 
                 vector<E> child = crossover(parent1, parent2);
-                
+
                 population[parentSize + j] = child;
             }
         }
@@ -147,98 +137,70 @@ class GA {
         void run() {
             validateParameters();
 
-            initializePopulation();
-            // printPopulation();
+            initializeParents();
+            printPopulation();
 
-            for (size_t i = 0; i < maxGenerations; i++) {
+            for (generation = 0; generation < maxGenerations; generation++) {
                 breed();
                 mutateChildren();
 
-                // calculate fitness separately
                 sort(population.begin(), population.end(), [this](vector<E> a, vector<E> b) {
-                    return fitnessFunc(a) < fitnessFunc(b);
+                    return fitnessFunc(&a) < fitnessFunc(&b);
                 });
 
+
                 if (onGenerationEndFunc != nullptr) {
-                    onGenerationEndFunc(&population, i);
+                    onGenerationEndFunc(&population, generation);
                 }
 
                 replaceWeakToPopulationEnd();
             }
 
-            // cout << "Final population" << endl;
-            // printPopulation();
-
-            cout << "Best chromosome: " << endl;
-            printChromosome(population[0]);
-
+            onFinish();
             printParameters();
         }
 
     private:
-        void printCrossover(vector<E> chromosome1, vector<E> chromosome2, vector<E> child, size_t crossoverPoint) {
-            cout << "Crossover point: " << crossoverPoint << endl << endl;
+        vector<E> crossover(
+            vector<E> *chromosome1, 
+            vector<E> *chromosome2
+        ) {
+            int type = randInt(0, 1);
 
-            cout << "Parent 1: ";
-            printChromosome(chromosome1);
-            cout << endl;
+            vector<E> child = *chromosome1;
 
-            cout << "Parent 2: ";
-            printChromosome(chromosome2);
-            cout << endl;
+            if (type == 0) {
+                size_t crossoverPoint = randInt(0, chromosomeLength - 1);
 
-            cout << "Child:    ";
-
-            for (size_t i = 0; i < chromosomeLength; i++) {
-                cout << child[i];
-
-                if (i == crossoverPoint) {
-                    cout << "|";
-                } else {
-                    cout << " ";
+                for (size_t i = crossoverPoint; i < chromosomeLength; i++) {
+                    child[i] = (*chromosome2)[i];
                 }
             }
-            
-            cout << endl;
-        }
-        
-        vector<E> crossover(vector<E> chromosome1, vector<E> chromosome2) {
-            size_t crossoverPoint = randInt(0, chromosomeLength - 1);
 
-            vector<E> child = chromosome1;
-
-            for (size_t i = crossoverPoint; i < chromosomeLength; i++) {
-                child[i] = chromosome2[i];
+            if (type == 1) {
+                for (size_t i = 0; i < chromosomeLength; i++) {
+                    if (i % 2 == 0) {
+                        child[i] = (*chromosome2)[i];
+                    }
+                }    
             }
-
-            // for (size_t i = 0; i < chromosomeLength; i++) {
-            //     if (randDouble(0.0, 1.0) < 0.5) {
-            //         child[i] = chromosome2[i];
-            //     }
-            // }    
-
-            // printCrossover(chromosome1, chromosome2, child, crossoverPoint);
 
             return child;
         }
 
-        void mutateChromosome(vector<E> chromosome) {
+        void mutateChromosome(vector<E> *chromosome) {
             size_t mutationPoint = randInt(0, chromosomeLength - 1);
-
-            chromosome[mutationPoint] = getMutationValue(chromosome[mutationPoint]);
+            auto* mutValueRef = &(*chromosome)[mutationPoint];
+    
+            *mutValueRef = mutateGeneFunc(*mutValueRef);
         }
 
         void mutateChildren() {
             for (size_t i = parentSize; i < populationSize; i++) {
                 if (randDouble(0.0, 1.0) < mutationChance) {
-                    mutateChromosome(population[parentSize]);
+                    mutateChromosome(&population[i]);
                 }
             }
-        }
-
-        E getMutationValue(E value) {
-            // change depenging on fitness etc.
-            return mutateRandFunc(value);
         }
 
         vector<E> createChromosome() {
@@ -251,9 +213,7 @@ class GA {
             return chromosome;
         }
 
-        void initializePopulation() {
-            cout << "Initializing population" << endl;
-
+        void initializeParents() {
             for (size_t i = 0; i < parentSize; i++) {
                 vector<E> chromosome = createChromosome();
 
@@ -261,21 +221,15 @@ class GA {
             }
         }
 
-        void printChromosome(vector<E> chromosome) {
-            for (auto it = chromosome.begin(); it != chromosome.end(); ++it) {
-                cout << *it << " ";
-            }
-
-            cout << endl;
-        }
-
         void printPopulation() {
-            for (auto c = population.begin(); c != population.end(); ++c) {
+            for (auto c = population.begin(); c != population.end() - offspringSize; ++c) {
                 vector<E> chromosome = *c;
 
                 printf("Chromosome: %ld:\t", c - population.begin());
 
-                printChromosome(chromosome);
+                for (auto it = chromosome.begin(); it != chromosome.end(); ++it) {
+                    cout << *it << " ";
+                }
 
                 cout << endl;
             }
@@ -307,50 +261,91 @@ void printMemoryUsage() {
     cout << "Memory usage: " << usage.ru_maxrss << " kb" << endl;
 }
 
-
-double equation(double a, double b, double c, double x) {
-    return a * x * x + b * x + c;
+double rosensbrock(double a, double b) {
+    return 100 * pow(b - a * a, 2) + pow(1 - a, 2);
 }
 
-double desiredResult = equation(1, 2, 3, 4);
+double sphere(double a, double b) {
+    return a * a + b * b;
+}
+
+double deJong(double a, double b) {
+    return 3905.93 - 100 * (a * a - b) * (a * a - b) - (1 - a) * (1 - a);
+}
+
+double venter(double a, double b) {
+    return 100 * pow(b - a * a, 2) + pow(1 - a, 2);
+}
+
+double ackley(double a, double b) {
+    return -20 * exp(-0.2 * sqrt(0.5 * (a * a + b * b))) - exp(0.5 * (cos(2 * M_PI * a) + cos(2 * M_PI * b))) + 20 + M_E;
+}
+
+double schwefel(double a, double b) {
+    return 418.9829 * 2 - (a * sin(sqrt(abs(a))) + b * sin(sqrt(abs(b))));
+}
+
+double griewank(double a, double b) {
+    return 1 + (a * a + b * b) / 4000 - cos(a) * cos(b / sqrt(2));
+}
+
+double styblinski(double a, double b) {
+    return 0.5 * (a * a * a * a - 16 * a * a + 5 * a + b * b * b * b - 16 * b * b + 5 * b);
+}
+
+// test equations
+double equation(double a, double b, double c, double d) {
+    // return a * x * x * x + b * x * x + c * x;
+
+    // return a * a + b * b + c * c + d * d;
+
+    return a + b + c + d;
+}
 
 
-double fitnessFunc(vector<double> chromosome) {
-    double result = equation(chromosome[0], chromosome[1], chromosome[2], chromosome[3]);
+double desiredResult = equation(40, 30, 20, 10);
+
+
+double fitnessFunc(vector<double> *chromosome) {
+    double result = equation(
+        chromosome->at(0),
+        chromosome->at(1),
+        chromosome->at(2),
+        chromosome->at(3)
+    );
 
     return abs(result - desiredResult);
 }
+
 
 int main() {
     gen.seed(random_device()());
     // srand(time(NULL));
 
     GA<double> ga(
-        100,
+        10, // max generations
         4, 
-        100,
-        0.2,
-        0.3,
-        0.2
+        100, // parent size
+        0, // elite percent
+        0.2, // mutation chance
+        0 // keep worst percent
     );
 
-    ga.setInitRandFunc([]() -> double {
-        return randInt(-10, 10);
-    });
+    ga.initRandFunc = []() -> double {
+        return norm_dist(10, 10);
+    };
 
-    ga.setMutateRandFunc([](double value) -> double {
+    ga.mutateGeneFunc = [](double value) -> double {
         //  value + norm_dist(0, 0.1);
-        return value + norm_dist(-1, 1);
-    });
+        return value + norm_dist(-5, 5);
+    };
 
+    ga.fitnessFunc = fitnessFunc;
 
-    ga.setFitnessFunc(fitnessFunc);
-
-    ga.setOnGenerationEndFunc([](auto* population, size_t generation) {
-        // cout << "Generation end" << endl;
+    ga.onGenerationEndFunc = [ga](auto* population, size_t generation) {
         vector<double> bestChromosome = population->at(0);
 
-        int bestFitness = fitnessFunc(bestChromosome);
+        int bestFitness = fitnessFunc(&bestChromosome);
         
         cout << "Best fitness: " << bestFitness << endl;
         cout << "Generation: " << generation << endl;
@@ -358,8 +353,13 @@ int main() {
         cout << "Result: " << equation(bestChromosome[0], bestChromosome[1], bestChromosome[2], bestChromosome[3]) << endl;
 
         printf("a: %f, b: %f, c: %f, x: %f\n", bestChromosome[0], bestChromosome[1], bestChromosome[2], bestChromosome[3]);
-        this_thread::sleep_for(chrono::milliseconds(100));
-    });
+
+        this_thread::sleep_for(chrono::milliseconds(200));
+    };
+
+    ga.onFinish = []() {
+        cout << "Generation end" << endl;
+    };
 
     ga.run();
 
@@ -371,31 +371,5 @@ int main() {
     return 0;
 }
 
-double norm_dist(double mean, double std_dev) {
-    normal_distribution<double> dist(mean, std_dev);
 
-    return dist(gen);
-};
-
-template <typename T>
-T find_median(T arr[], size_t arr_size) {
-    T* arr_copy = new T[arr_size];
-    for (int i = 0; i < arr_size; i++) {
-        arr_copy[i] = arr[i];
-    }
-
-    sort(arr_copy, arr_copy + arr_size);
-
-    T median;
-    
-    if (arr_size % 2 == 0) {
-        median = (arr_copy[arr_size / 2 - 1] + arr_copy[arr_size / 2]) / 2;
-    } else {
-        median = arr_copy[arr_size / 2];
-    }
-
-    delete[] arr_copy;
-
-    return median;
-}
 
