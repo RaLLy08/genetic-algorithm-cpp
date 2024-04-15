@@ -6,6 +6,7 @@
 #include <functional>
 #include <sys/resource.h>
 #include <cassert>
+#include <sstream>
 
 #include <thread>
 #include <chrono>
@@ -60,12 +61,21 @@ class GA {
 
 
         void validateParameters() {
+            stringstream ss;
+
+
             if (this->initRandFunc == nullptr) {
                 throw invalid_argument("initRandFunc is not set");
             }
 
             if (this->fitnessFunc == nullptr) {
                 throw invalid_argument("fitnessFunc is not set");
+            }
+
+            if (keepWorstSize > parentSize - eliteParentSize) {
+                ss << "keepWorstSize(" << keepWorstSize << ") is less than parentSize(" << parentSize << ") - eliteParentSize(" << eliteParentSize << ")";
+
+                throw invalid_argument(ss.str());
             }
         }
 
@@ -113,11 +123,6 @@ class GA {
         }
 
         void replaceWeakToPopulationEnd() {
-            assert((
-                "keepWorstSize must be less than parentSize - eliteParentSize", 
-                keepWorstSize < parentSize - eliteParentSize
-            ));
-
             shuffle(population.begin() + parentSize, population.end(), gen);
 
             for (size_t wI = 0; wI < keepWorstSize; wI++) {
@@ -299,11 +304,11 @@ double equation(double a, double b, double c, double d) {
 
     // return a * a + b * b + c * c + d * d;
 
-    return a + b + c + d;
+    return rosensbrock(a, b);
 }
 
 
-double desiredResult = equation(40, 30, 20, 10);
+double desiredResult = equation(4, 10, 6, 7);
 
 
 double fitnessFunc(vector<double> *chromosome) {
@@ -314,7 +319,7 @@ double fitnessFunc(vector<double> *chromosome) {
         chromosome->at(3)
     );
 
-    return abs(result - desiredResult);
+    return fabs(result - desiredResult);
 }
 
 
@@ -323,12 +328,12 @@ int main() {
     // srand(time(NULL));
 
     GA<double> ga(
-        10, // max generations
+        300, // max generations
         4, 
-        100, // parent size
-        0, // elite percent
+        1000, // parent size
+        0.1, // elite percent
         0.2, // mutation chance
-        0 // keep worst percent
+        0.3 // keep worst percent
     );
 
     ga.initRandFunc = []() -> double {
@@ -337,24 +342,36 @@ int main() {
 
     ga.mutateGeneFunc = [](double value) -> double {
         //  value + norm_dist(0, 0.1);
-        return value + norm_dist(-5, 5);
+        return value + norm_dist(10, 10);
     };
 
     ga.fitnessFunc = fitnessFunc;
 
-    ga.onGenerationEndFunc = [ga](auto* population, size_t generation) {
+    auto start = chrono::high_resolution_clock::now();
+
+    ga.onGenerationEndFunc = [&](auto* population, size_t generation) {
+        auto duration = chrono::duration_cast<chrono::milliseconds>(
+            chrono::high_resolution_clock::now() - start
+        );
+
+        cout << "*-------------------------------------------*" << endl;
+
+        cout << "Generation: " << generation << " Between Calls: " << duration.count() << " ms" << endl;
+
         vector<double> bestChromosome = population->at(0);
 
-        int bestFitness = fitnessFunc(&bestChromosome);
+        float bestFitness = fitnessFunc(&bestChromosome);
+        float result = equation(bestChromosome[0], bestChromosome[1], bestChromosome[2], bestChromosome[3]);
         
+        cout << "*-------------------------------------------*" << endl;
         cout << "Best fitness: " << bestFitness << endl;
-        cout << "Generation: " << generation << endl;
-        cout << "Desired result: " << desiredResult << endl;
-        cout << "Result: " << equation(bestChromosome[0], bestChromosome[1], bestChromosome[2], bestChromosome[3]) << endl;
+        cout << "Desired result: " << "Result" << endl;
+        cout << desiredResult << " | " << result << endl;
 
         printf("a: %f, b: %f, c: %f, x: %f\n", bestChromosome[0], bestChromosome[1], bestChromosome[2], bestChromosome[3]);
 
-        this_thread::sleep_for(chrono::milliseconds(200));
+        // this_thread::sleep_for(chrono::milliseconds(200));
+        start = chrono::high_resolution_clock::now();
     };
 
     ga.onFinish = []() {
