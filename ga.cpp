@@ -143,7 +143,6 @@ class GA {
             validateParameters();
 
             initializeParents();
-            printPopulation();
 
             for (generation = 0; generation < maxGenerations; generation++) {
                 breed();
@@ -226,20 +225,6 @@ class GA {
             }
         }
 
-        void printPopulation() {
-            for (auto c = population.begin(); c != population.end() - offspringSize; ++c) {
-                vector<E> chromosome = *c;
-
-                printf("Chromosome: %ld:\t", c - population.begin());
-
-                for (auto it = chromosome.begin(); it != chromosome.end(); ++it) {
-                    cout << *it << " ";
-                }
-
-                cout << endl;
-            }
-        }
-        
         void printParameters() {
             cout << endl << "--------------------------------" << endl;
             cout << "Max generations: " << maxGenerations << endl;
@@ -299,38 +284,57 @@ double styblinski(double a, double b) {
 }
 
 // test equations
-double equation(double a, double b, double c, double d) {
+double equation(double a, double b, double c, double d, double e, double f, double g, double h, double i, double j) {
     // return a * x * x * x + b * x * x + c * x;
 
     // return a * a + b * b + c * c + d * d;
 
-    return rosensbrock(a, b);
+    return rosensbrock(a, b) + sphere(c, d) + deJong(e, f) + venter(g, h) + ackley(i, j) + schwefel(a, b) + griewank(c, d) + styblinski(e, f);
 }
 
 
-double desiredResult = equation(4, 10, 6, 7);
+double desiredResult = equation(4, 10, 6, 7, 8, 9, 10, 11, 12, 13);
 
+void printChromosome(vector<double> *chromosome) {
+    for (auto it = chromosome->begin(); it != chromosome->end(); ++it) {
+        cout << *it << " ";
+    }
 
-double fitnessFunc(vector<double> *chromosome) {
-    double result = equation(
+    cout << endl;
+}
+
+double calcResult(vector<double> *chromosome) {
+    return equation(
         chromosome->at(0),
         chromosome->at(1),
         chromosome->at(2),
-        chromosome->at(3)
+        chromosome->at(3),
+        chromosome->at(4),
+        chromosome->at(5),
+        chromosome->at(6),
+        chromosome->at(7),
+        chromosome->at(8),
+        chromosome->at(9)
     );
+
+}
+
+double fitnessFunc(vector<double> *chromosome) {
+    double result = calcResult(chromosome);
 
     return fabs(result - desiredResult);
 }
 
 
 int main() {
-    gen.seed(random_device()());
-    // srand(time(NULL));
+    int seed = random_device()();
+    
+    // gen.seed(seed);
 
     GA<double> ga(
         300, // max generations
-        4, 
-        1000, // parent size
+        10, 
+        2000, // parent size
         0.1, // elite percent
         0.2, // mutation chance
         0.3 // keep worst percent
@@ -361,21 +365,23 @@ int main() {
         vector<double> bestChromosome = population->at(0);
 
         float bestFitness = fitnessFunc(&bestChromosome);
-        float result = equation(bestChromosome[0], bestChromosome[1], bestChromosome[2], bestChromosome[3]);
+        float result = calcResult(&bestChromosome);
         
         cout << "*-------------------------------------------*" << endl;
         cout << "Best fitness: " << bestFitness << endl;
         cout << "Desired result: " << "Result" << endl;
         cout << desiredResult << " | " << result << endl;
 
-        printf("a: %f, b: %f, c: %f, x: %f\n", bestChromosome[0], bestChromosome[1], bestChromosome[2], bestChromosome[3]);
+        cout << "Best chromosome: ";
+        printChromosome(&bestChromosome);
 
         // this_thread::sleep_for(chrono::milliseconds(200));
         start = chrono::high_resolution_clock::now();
     };
 
-    ga.onFinish = []() {
+    ga.onFinish = [&]() {
         cout << "Generation end" << endl;
+        cout << "Seed: " << seed << endl;
     };
 
     ga.run();
