@@ -1,1 +1,1 @@
-g++ -o ga.exe *.cpp
+g++ -o ga.exe ./src/*.cpp
