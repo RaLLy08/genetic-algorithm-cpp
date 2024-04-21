@@ -1,6 +1,7 @@
 #pragma once
 #include <cmath>
 
+
 double rosensbrock(double a, double b);
 double sphere(double a, double b);
 double deJong(double a, double b);

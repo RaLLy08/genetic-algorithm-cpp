@@ -108,55 +108,119 @@ namespace EquationsGA {
 
 
 namespace DampedWavesGA {
-    auto sineWave(float amplitude, float frequency, float phase, float decay) {
-        return [=](float x) {
-            return amplitude * sin(2 * M_PI * frequency * x + phase) * exp(-decay * x);
-        };
-    }
 
-    auto printSineWave(float amplitude, float frequency, float phase, float decay = 0) {
-        auto sine1 = sineWave(amplitude, frequency, phase, decay);
+    class SineWave {
+        public:
+            double x = 0;
 
-        return [=]() {
-            float x = 0;
-            float y = 0;
+            void addWave(double amplitude, double frequency, double phase, double decay) {
+                waves.push_back(
+                    make_tuple(amplitude, frequency, phase, decay)
+                );
+            }
 
-            while (true) {
-                y = sine1(x);
-                x += 0.03;
+            vector<
+                tuple<double, double, double, double>
+            > waves;
 
-                string wave = "";
 
-                if (y > 0) {
+            SineWave(double amplitude, double frequency, double phase, double decay = 0) {
+                addWave(
+                    amplitude, frequency, phase, decay
+                );
+            }
 
-                    for (int i = 0; i < amplitude; i++) {
-                        wave += ' ';
-                    }
+            // SineWave& operator+(const SineWave& other) {
+            //     for (auto wave : other.waves) {
+            //         waves.push_back(wave);
+            //     }
+            //     return *this;
+            // }
 
-                    for (int i = 0; i < y; i++) {
-                        wave += 'o';
-                    }
-                } else {
-                    for (int i = 0; i < amplitude + y; i++) {
-                        wave += ' ';
-                    }
+            double sumAmplitude() {
+                double sum = 0;
 
-                    for (int i = 0; i < -y; i++) {
-                        wave += 'o';
-                    }
+                for (auto wave : waves) {
+                    double amplitude = get<0>(wave);
+
+                    sum += fabs(amplitude);
                 }
 
-                cout << wave << endl;
-
-
-                this_thread::sleep_for(chrono::milliseconds(100));
+                return sum;
             }
-        };
+
+            double operator()(double x) {
+                double y = 0;
+
+                for (auto wave : waves) {
+                    double amplitude = get<0>(wave);
+                    double frequency = get<1>(wave);
+                    double phase = get<2>(wave);
+                    double decay = get<3>(wave);
+
+                    y += amplitude * sin(2 * M_PI * frequency * x + phase) * exp(-decay * x);
+                }
+
+                return y;
+            }
+    };
+    // double sineWave(double &x, double amplitude, double frequency, double phase, double decay) {
+    //     return amplitude * sin(2 * M_PI * frequency * x + phase) * exp(-decay * x);
+    // }
+
+    void printWavePoint(int y, int width) {
+        string waveStr = "";
+
+        if (y > 0) {
+            for (int i = 0; i < width; i++) {
+                waveStr += ' ';
+            }
+
+            for (int i = 0; i < y; i++) {
+                waveStr += 'o';
+            }
+        } else {
+            for (int i = 0; i < width + y; i++) {
+                waveStr += ' ';
+            }
+
+            for (int i = 0; i < -y; i++) {
+                waveStr += 'o';
+            }
+        }
+
+        cout << waveStr << endl;
     }
 
-    void runGA() {
-        auto sineWave1 = printSineWave(30, 1, 0, 0.4);
+    auto printSineWave() {
+        SineWave wave = SineWave(10, 2, 20, 0.4);
 
-        sineWave1();
+        wave.addWave(-40, 2, 0, 0.4);
+        float maxAmplitude = wave.sumAmplitude();
+
+        // wave.addWave(10, 2, 0, 0.4);
+        // wave.addWave(10, 3, 0, 0.4);
+        // wave.addWave(20, 4, 2, 0.8);
+
+        double y = 0;
+        double x = 0;
+            
+        while (true) {
+            y = wave(x);
+            x += 0.03;
+
+            printWavePoint(y, maxAmplitude);
+
+            this_thread::sleep_for(chrono::milliseconds(100));
+        }
+    }
+
+
+
+
+    void runGA() {
+        printSineWave();
+
+        // sineWave1();
     }
 }

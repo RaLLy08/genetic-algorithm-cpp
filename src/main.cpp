@@ -1,10 +1,7 @@
 #include <iostream>
 #include <sys/resource.h>
 
-#include <thread>
-#include <chrono>
 #include "examples.h"
-#include <math.h>
 
 using namespace std;
 
@@ -16,9 +13,8 @@ void printMemoryUsage() {
 }
 
 
-
 int main() {
-    DampedWavesGA::runGA();
+    EquationsGA::runGA();
     // auto sineWave1 = printSineWave(30, 1, 0, 0.4);
 
     // sineWave1();
