@@ -1,16 +1,16 @@
 #include <iostream>
-#include <sys/resource.h>
+// #include <sys/resource.h>
 
 #include "examples.h"
 
 using namespace std;
 
-void printMemoryUsage() {
-    struct rusage usage;
-    getrusage(RUSAGE_SELF, &usage);
+// void printMemoryUsage() {
+//     struct rusage usage;
+//     getrusage(RUSAGE_SELF, &usage);
 
-    cout << "Memory usage: " << usage.ru_maxrss << " kb" << endl;
-}
+//     cout << "Memory usage: " << usage.ru_maxrss << " kb" << endl;
+// }
 
 
 int main() {
@@ -19,7 +19,7 @@ int main() {
 
     // sineWave1();
 
-    printMemoryUsage();
+    // printMemoryUsage();
 
     return 0;
 }

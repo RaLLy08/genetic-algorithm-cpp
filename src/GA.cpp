@@ -65,6 +65,7 @@ void GA::validateParameters() {
 
 void GA::breed() {
     // variable child count
+    
     for (size_t j = 0; j < parentSize; j++) {
         size_t parent2Index = Random::randInt(0, parentSize - 1);
 

@@ -11,7 +11,11 @@
 #include "GA.h"
 #include "equations.h"
 
+#include <fstream>
+
 namespace EquationsGA {
+
+
     using namespace std;
 
     void runGA();

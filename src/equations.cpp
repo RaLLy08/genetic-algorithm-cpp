@@ -1,7 +1,7 @@
 #include "equations.h"
 
-double rosensbrock(double a, double b) {
-    return 100 * pow(b - a * a, 2) + pow(1 - a, 2);
+double rosensbrock(double x, double y) {
+    return 100 * pow(y - x * x, 2) + pow(1 - x, 2);
 }
 
 double sphere(double a, double b) {
@@ -17,7 +17,7 @@ double venter(double a, double b) {
 }
 
 double ackley(double a, double b) {
-    return -20 * exp(-0.2 * sqrt(0.5 * (a * a + b * b))) - exp(0.5 * (cos(2 * M_PI * a) + cos(2 * M_PI * b))) + 20 + M_E;
+    return -20 * exp(-0.4 * sqrt(0.5 * (a * a + b * b))) - exp(0.5 * (cos(2 * M_PI * a) + cos(2 * M_PI * b))) + 20 + M_E;
 }
 
 double schwefel(double a, double b) {
@@ -30,4 +30,8 @@ double griewank(double a, double b) {
 
 double styblinski(double a, double b) {
     return 0.5 * (a * a * a * a - 16 * a * a + 5 * a + b * b * b * b - 16 * b * b + 5 * b);
+}
+
+double rastrigin(double a, double b) {
+    return 20 + a * a - 10 * cos(2 * M_PI * a) + b * b - 10 * cos(2 * M_PI * b);
 }
