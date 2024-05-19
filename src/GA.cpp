@@ -96,7 +96,10 @@ void GA::replaceWeakToPopulationEnd() {
 void GA::run() {
     validateParameters();
 
-    initializeParents();
+    initialization();
+    sort(population.begin(), population.end(), [this](vector<double> a, vector<double> b) {
+        return fitnessFunc(a) < fitnessFunc(b);
+    });
 
     for (generation = 0; generation < maxGenerations; generation++) {
         breed();
@@ -169,8 +172,8 @@ vector<double> GA::createChromosome() {
     return chromosome;
 }
 
-void GA::initializeParents() {
-    for (size_t i = 0; i < parentSize; i++) {
+void GA::initialization() {
+    for (size_t i = 0; i < populationSize; i++) {
         vector<double> chromosome = createChromosome();
 
         population[i] = chromosome;

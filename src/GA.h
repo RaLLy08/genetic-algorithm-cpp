@@ -76,7 +76,7 @@ class GA {
         
         vector<double> createChromosome();
 
-        void initializeParents();
+        void initialization();
 
         void printParameters();
 };
